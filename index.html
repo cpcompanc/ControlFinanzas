@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14161c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Finanzas</title>
+<style>
+:root{
+  --tinta:#14161c;      /* fondo */
+  --papel:#f2f3f5;      /* texto principal */
+  --grafito:#1e212a;    /* superficie de card */
+  --linea:#2c3140;      /* bordes */
+  --tenue:#8b93a7;      /* texto secundario */
+  --alerta:#e8b23a;     /* vencido sin cerrar */
+  --ok:#5fbf7f;
+  --radio:14px;
+  --mono:ui-monospace,"SF Mono","Roboto Mono","DejaVu Sans Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--tinta);color:var(--papel);font-family:var(--sans);
+  font-size:15px;line-height:1.45;
+  padding:0 0 calc(84px + env(safe-area-inset-bottom));
+  overscroll-behavior-y:contain;
+}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+
+/* ── header ─────────────────────────────────────────────── */
+header{
+  position:sticky;top:0;z-index:20;background:rgba(20,22,28,.94);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--linea);
+  padding:calc(10px + env(safe-area-inset-top)) 16px 10px;
+  display:flex;align-items:center;gap:12px;
+}
+header h1{
+  font-size:13px;font-weight:600;margin:0;flex:1;
+  text-transform:uppercase;letter-spacing:.14em;color:var(--tenue);
+}
+.iconbtn{
+  background:none;border:1px solid var(--linea);color:var(--tenue);
+  width:34px;height:34px;border-radius:9px;font-size:15px;cursor:pointer;
+  display:grid;place-items:center;
+}
+.iconbtn:active{background:var(--grafito)}
+.iconbtn:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
+  outline:2px solid var(--papel);outline-offset:2px}
+#estado{font-size:11px;color:var(--tenue);font-family:var(--mono)}
+#estado.girando{animation:pulso 1.1s ease-in-out infinite}
+@keyframes pulso{50%{opacity:.35}}
+
+main{padding:14px 14px 0;max-width:560px;margin:0 auto}
+
+/* ── card de emisor ─────────────────────────────────────── */
+.emisor{
+  background:var(--grafito);border:1px solid var(--linea);border-radius:var(--radio);
+  padding:15px 16px 16px;margin-bottom:12px;position:relative;overflow:hidden;
+}
+.emisor::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--c,#888);
+}
+.etop{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px}
+.enom{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.eper{font-size:11px;color:var(--tenue);font-family:var(--mono)}
+.montos{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:4px}
+.m1{font-size:29px;font-weight:600}
+.m2{font-size:15px;color:var(--tenue)}
+.vacio{font-size:13px;color:var(--tenue);margin:2px 0 8px}
+
+/* ── medidor de ciclo (elemento firma) ──────────────────── */
+.ciclo{margin:14px 0 9px}
+.pista{
+  position:relative;height:22px;border-left:1px solid var(--linea);
+  border-right:1px solid var(--linea);
+}
+.pista::before{
+  content:"";position:absolute;left:0;right:0;top:10px;height:1px;
+  background:repeating-linear-gradient(90deg,var(--linea) 0 4px,transparent 4px 8px);
+}
+.avance{position:absolute;left:0;top:10px;height:1px;background:var(--c,#888)}
+.hoy{
+  position:absolute;top:4px;width:2px;height:14px;background:var(--papel);
+  transform:translateX(-1px);
+}
+.hoy::after{
+  content:attr(data-t);position:absolute;top:-13px;left:50%;transform:translateX(-50%);
+  font-size:9px;font-family:var(--mono);color:var(--papel);white-space:nowrap;
+}
+.corte{
+  position:absolute;right:0;top:2px;width:1px;height:18px;background:var(--c,#888);
+}
+.ejes{display:flex;justify-content:space-between;font-size:10.5px;color:var(--tenue);
+  font-family:var(--mono);margin-top:3px}
+.cierra{font-size:12px;margin-top:9px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.pill{
+  font-size:10.5px;font-family:var(--mono);padding:2px 7px;border-radius:99px;
+  border:1px solid var(--linea);color:var(--tenue);
+}
+.pill.urg{border-color:var(--c);color:var(--papel)}
+.pill.alerta{border-color:var(--alerta);color:var(--alerta)}
+
+.tarjetas{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;
+  padding-top:12px;border-top:1px solid var(--linea)}
+.chip{
+  font-size:11px;font-family:var(--mono);border:1px solid var(--linea);
+  border-radius:8px;padding:5px 9px;color:var(--tenue);
+}
+.chip b{color:var(--papel);font-weight:600}
+
+/* ── categorías ─────────────────────────────────────────── */
+.bloque{margin:18px 0 0}
+.bloque h2{font-size:11px;text-transform:uppercase;letter-spacing:.14em;
+  color:var(--tenue);margin:0 0 10px;font-weight:600}
+.cat{display:grid;grid-template-columns:1fr auto;gap:3px 10px;
+  align-items:baseline;margin-bottom:9px}
+.cat .n{font-size:13px}
+.cat .v{font-size:13px;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.barra{grid-column:1/-1;height:3px;background:var(--linea);border-radius:2px;overflow:hidden}
+.barra i{display:block;height:100%;background:var(--tenue);border-radius:2px}
+
+/* ── acción principal ───────────────────────────────────── */
+.fab{
+  position:fixed;left:0;right:0;bottom:0;z-index:25;
+  padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+  background:linear-gradient(to top,var(--tinta) 62%,transparent);
+}
+.fab button{
+  width:100%;max-width:532px;margin:0 auto;display:block;
+  background:var(--papel);color:var(--tinta);border:0;border-radius:12px;
+  padding:15px;font-size:15px;font-weight:650;font-family:var(--sans);cursor:pointer;
+}
+.fab button:active{transform:scale(.985)}
+
+/* ── hoja modal ─────────────────────────────────────────── */
+dialog{
+  border:0;padding:0;background:transparent;max-width:560px;width:100%;
+  margin:auto auto 0;
+}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+.hoja{
+  background:var(--grafito);border:1px solid var(--linea);
+  border-radius:16px 16px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));
+  max-height:88vh;overflow-y:auto;
+}
+.hoja h3{margin:0 0 14px;font-size:15px;font-weight:650}
+label{display:block;font-size:11px;color:var(--tenue);margin:0 0 5px;
+  text-transform:uppercase;letter-spacing:.08em}
+input,select{
+  width:100%;background:var(--tinta);border:1px solid var(--linea);color:var(--papel);
+  border-radius:10px;padding:11px 12px;font-size:16px;font-family:var(--sans);
+}
+input[type=number],input[type=date],input[type=time]{font-family:var(--mono)}
+.campo{margin-bottom:13px}
+.fila{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.seg{display:flex;gap:0;border:1px solid var(--linea);border-radius:10px;overflow:hidden}
+.seg button{
+  flex:1;background:var(--tinta);border:0;color:var(--tenue);padding:11px;
+  font-size:14px;font-family:var(--mono);cursor:pointer;
+}
+.seg button[aria-pressed=true]{background:var(--papel);color:var(--tinta);font-weight:650}
+.aviso{
+  border:1px solid var(--alerta);border-radius:10px;padding:11px 12px;
+  font-size:12.5px;margin-bottom:13px;color:var(--alerta);
+}
+.aviso .opc{display:flex;gap:8px;margin-top:9px}
+.aviso .opc button{
+  flex:1;background:transparent;border:1px solid var(--linea);color:var(--papel);
+  border-radius:8px;padding:9px;font-size:12px;font-family:var(--mono);cursor:pointer;
+}
+.aviso .opc button[aria-pressed=true]{background:var(--alerta);color:var(--tinta);border-color:var(--alerta)}
+.acciones{display:flex;gap:10px;margin-top:6px}
+.acciones button{
+  flex:1;border-radius:11px;padding:14px;font-size:15px;font-weight:600;
+  cursor:pointer;font-family:var(--sans);
+}
+.btn-p{background:var(--papel);color:var(--tinta);border:0}
+.btn-s{background:transparent;color:var(--tenue);border:1px solid var(--linea)}
+.error{color:#ff8f8f;font-size:12.5px;margin-top:10px;min-height:1em}
+
+/* ── toast ──────────────────────────────────────────────── */
+#toast{
+  position:fixed;left:50%;bottom:96px;transform:translate(-50%,14px);
+  background:var(--papel);color:var(--tinta);padding:11px 16px;border-radius:10px;
+  font-size:13px;font-weight:600;opacity:0;pointer-events:none;z-index:40;
+  transition:opacity .2s,transform .2s;max-width:88vw;text-align:center;
+}
+#toast.ver{opacity:1;transform:translate(-50%,0)}
+
+.pendientes{
+  border:1px dashed var(--alerta);border-radius:10px;padding:10px 12px;
+  font-size:12.5px;color:var(--alerta);margin-bottom:12px;
+}
+.centro{text-align:center;color:var(--tenue);padding:40px 20px;font-size:14px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Finanzas</h1>
+  <span id="estado"></span>
+  <button class="iconbtn" id="btnSync" aria-label="Actualizar">↻</button>
+  <button class="iconbtn" id="btnCfg" aria-label="Ajustes">⚙</button>
+</header>
+
+<main id="app"><div class="centro">Cargando…</div></main>
+
+<div class="fab"><button id="btnGasto">Cargar gasto</button></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<!-- ── hoja: nuevo gasto ── -->
+<dialog id="dlgGasto">
+  <form method="dialog" class="hoja" id="formGasto">
+    <h3>Cargar gasto</h3>
+    <div id="avisoCierre"></div>
+    <div class="campo">
+      <label for="gMonto">Monto</label>
+      <input type="number" id="gMonto" inputmode="decimal" step="0.01" min="0" required placeholder="0,00">
+    </div>
+    <div class="campo">
+      <label>Moneda</label>
+      <div class="seg" id="segMoneda">
+        <button type="button" data-v="ARS" aria-pressed="true">ARS</button>
+        <button type="button" data-v="USD" aria-pressed="false">USD</button>
+      </div>
+    </div>
+    <div class="campo">
+      <label for="gTarjeta">Tarjeta</label>
+      <select id="gTarjeta" required></select>
+    </div>
+    <div class="fila">
+      <div class="campo"><label for="gFecha">Fecha</label><input type="date" id="gFecha" required></div>
+      <div class="campo"><label for="gHora">Hora</label><input type="time" id="gHora" required></div>
+    </div>
+    <div class="campo">
+      <label for="gComercio">Comercio</label>
+      <input type="text" id="gComercio" placeholder="Opcional" autocomplete="off">
+    </div>
+    <div class="fila">
+      <div class="campo"><label for="gCat">Categoría</label><select id="gCat"></select></div>
+      <div class="campo"><label for="gTitular">Titular</label><select id="gTitular"></select></div>
+    </div>
+    <p class="error" id="errGasto"></p>
+    <div class="acciones">
+      <button type="button" class="btn-s" id="gCancelar">Cancelar</button>
+      <button type="submit" class="btn-p" id="gGuardar">Guardar</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ── hoja: ajustes ── -->
+<dialog id="dlgCfg">
+  <form method="dialog" class="hoja" id="formCfg">
+    <h3>Conexión</h3>
+    <div class="campo">
+      <label for="cUrl">URL del Web App</label>
+      <input type="url" id="cUrl" required placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off">
+    </div>
+    <div class="campo">
+      <label for="cToken">Token</label>
+      <input type="text" id="cToken" required autocomplete="off">
+    </div>
+    <p class="error" id="errCfg"></p>
+    <div class="acciones">
+      <button type="button" class="btn-s" id="cCancelar">Cancelar</button>
+      <button type="submit" class="btn-p">Probar y guardar</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+"use strict";
+
+/* ══ estado ══════════════════════════════════════════════ */
+var LS = {
+  cfg: 'fa.cfg', datos: 'fa.datos', cola: 'fa.cola', cats: 'fa.cats'
+};
+var CATEGORIAS = ['Delivery','Gastronomía','Supermercado','Combustible','Entretenimiento',
+  'Salud','Viajes','Suscripciones','Indumentaria','Transporte','Impuestos','Compras','Otros'];
+var TITULARES = ['Cristóbal','Mila','Extensión'];
+
+var cfg = leer(LS.cfg, null);
+var datos = leer(LS.datos, null);
+var cola = leer(LS.cola, []);
+var monedaSel = 'ARS';
+var periodoElegido = null;   // override del día de cierre
+var cargando = false;
+
+function leer(k, def) {
+  try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : def; }
+  catch (e) { return def; }
+}
+function guardar(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+
+/* ══ formato ═════════════════════════════════════════════ */
+var fmtARS = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function plata(n, mon) {
+  var s = fmtARS.format(Math.abs(n || 0));
+  return (mon === 'USD' ? 'U$S ' : '$ ') + s;
+}
+var MESES = ['enero','febrero','marzo','abril','mayo','junio','julio',
+             'agosto','septiembre','octubre','noviembre','diciembre'];
+function nombrePeriodo(p) {
+  if (!p) return '';
+  var a = p.split('-');
+  return MESES[parseInt(a[1], 10) - 1] + ' ' + a[0];
+}
+function dm(iso) {  // 2026-07-30 -> 30/7
+  if (!iso) return '—';
+  var a = iso.split('-');
+  return parseInt(a[2], 10) + '/' + parseInt(a[1], 10);
+}
+function hoyISO() {
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' +
+         String(d.getDate()).padStart(2, '0');
+}
+function horaAhora() {
+  var d = new Date();
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+function mesRelativo(delta) {
+  var d = new Date();
+  d.setDate(1); d.setMonth(d.getMonth() + delta);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+function diasEntre(a, b) {
+  return Math.round((Date.parse(b + 'T00:00:00') - Date.parse(a + 'T00:00:00')) / 86400000);
+}
+
+/* ══ API ═════════════════════════════════════════════════ */
+function api(action, params, body) {
+  if (!cfg || !cfg.url) return Promise.reject(new Error('Falta configurar la conexión'));
+  var u = cfg.url + (cfg.url.indexOf('?') < 0 ? '?' : '&') +
+          'action=' + encodeURIComponent(action) + '&token=' + encodeURIComponent(cfg.token);
+  Object.keys(params || {}).forEach(function (k) {
+    if (params[k] !== undefined && params[k] !== null && params[k] !== '')
+      u += '&' + k + '=' + encodeURIComponent(params[k]);
+  });
+  var opt = { method: 'GET', redirect: 'follow' };
+  if (body) {
+    var payload = {};
+    Object.keys(body).forEach(function (k) { payload[k] = body[k]; });
+    payload.action = action; payload.token = cfg.token;
+    // text/plain evita el preflight CORS: Apps Script no responde OPTIONS.
+    opt = { method: 'POST', redirect: 'follow',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload) };
+  }
+  return fetch(u, opt).then(function (r) {
+    return r.text().then(function (t) {
+      var j;
+      try { j = JSON.parse(t); }
+      catch (e) { throw new Error('Respuesta no válida. ¿La URL termina en /exec?'); }
+      if (j.ok === false) throw new Error(j.error || 'Error del servidor');
+      return j;
+    });
+  });
+}
+
+/* ══ refresco ════════════════════════════════════════════ */
+function refrescar() {
+  if (cargando || !cfg) return Promise.resolve();
+  cargando = true;
+  marcarEstado('actualizando…', true);
+
+  return api('calendario', { desde: mesRelativo(-1), meses: 4 })
+    .then(function (cal) {
+      return api('bancos').then(function (b) { return { cal: cal.calendario, bancos: b.bancos }; });
+    })
+    .then(function (base) {
+      var ciclos = armarCiclos(base.cal, base.bancos);
+      var periodos = {};
+      ciclos.forEach(function (c) { periodos[c.periodo] = true; });
+      var lista = Object.keys(periodos);
+      return Promise.all(lista.map(function (p) { return api('resumen', { periodo: p }); }))
+        .then(function (rs) {
+          var porPeriodo = {};
+          lista.forEach(function (p, i) { porPeriodo[p] = rs[i]; });
+          ciclos.forEach(function (c) {
+            var r = porPeriodo[c.periodo];
+            var pb = (r.por_banco || {})[c.banco_id] || { ars: 0, usd: 0, count: 0 };
+            c.ars = pb.ars; c.usd = pb.usd; c.count = pb.count;
+            c.tc = r.tc_usd_ars;
+            c.categorias = r.por_categoria || {};
+          });
+          datos = { ciclos: ciclos, ts: Date.now() };
+          guardar(LS.datos, datos);
+          pintar();
+          marcarEstado(horaAhora(), false);
+        });
+    })
+    .catch(function (e) {
+      marcarEstado('sin conexión', false);
+      if (!datos) pintarError(e.message);
+      else toast(e.message);
+    })
+    .then(function () { cargando = false; });
+}
+
+/**
+ * Un ciclo por emisor: su período ABIERTO (el primero cuyo cierre no pasó).
+ * Los períodos ya vencidos y todavía abiertos se marcan aparte.
+ */
+function armarCiclos(cal, bancos) {
+  var meta = {};
+  (bancos || []).forEach(function (b) { meta[b.id] = b; });
+
+  var porEmisor = {};
+  cal.forEach(function (bloque) {
+    bloque.tarjetas.forEach(function (t) {
+      if (!t.activa || !t.fecha_cierre) return;
+      if (!porEmisor[t.banco_id]) porEmisor[t.banco_id] = [];
+      var e = porEmisor[t.banco_id];
+      var p = null;
+      for (var i = 0; i < e.length; i++) if (e[i].periodo === bloque.periodo) p = e[i];
+      if (!p) {
+        p = { periodo: bloque.periodo, fecha_cierre: t.fecha_cierre, hora_cierre: t.hora_cierre,
+              dias_cierre: t.dias_cierre, estado: t.estado_periodo, tarjetas: [] };
+        e.push(p);
+      }
+      p.tarjetas.push(t);
+    });
+  });
+
+  var out = [];
+  Object.keys(porEmisor).forEach(function (bid) {
+    var lista = porEmisor[bid].sort(function (a, b) { return a.periodo < b.periodo ? -1 : 1; });
+    var abierto = null, vencidos = [];
+    lista.forEach(function (p) {
+      if (p.dias_cierre >= 0 && !abierto) abierto = p;
+      else if (p.dias_cierre < 0 && p.estado === 'abierto') vencidos.push(p);
+    });
+    if (!abierto) abierto = lista[lista.length - 1];
+    if (!abierto) return;
+
+    var idx = lista.indexOf(abierto);
+    var previo = idx > 0 ? lista[idx - 1] : null;
+    var b = meta[bid] || {};
+    out.push({
+      banco_id: bid,
+      nombre: b.nombre || bid,
+      color: b.color || '#8b93a7',
+      tipo: b.tipo || '',
+      periodo: abierto.periodo,
+      fecha_cierre: abierto.fecha_cierre,
+      hora_cierre: abierto.hora_cierre || '17:00',
+      dias_cierre: abierto.dias_cierre,
+      desde: previo ? previo.fecha_cierre : null,
+      tarjetas: abierto.tarjetas,
+      vencidos: vencidos.map(function (v) { return { periodo: v.periodo, fecha: v.fecha_cierre }; }),
+      ars: 0, usd: 0, count: 0, categorias: {}
+    });
+  });
+  return out;
+}
+
+/* ══ pintado ═════════════════════════════════════════════ */
+function pintar() {
+  var app = document.getElementById('app');
+  if (!cfg) {
+    app.innerHTML = '<div class="centro">Configurá la conexión con el botón ⚙ para empezar.</div>';
+    return;
+  }
+  if (!datos || !datos.ciclos || !datos.ciclos.length) {
+    app.innerHTML = '<div class="centro">Sin datos todavía. Tocá ↻ para traerlos.</div>';
+    return;
+  }
+  var h = '';
+  if (cola.length) {
+    h += '<div class="pendientes">' + cola.length + ' gasto' + (cola.length > 1 ? 's' : '') +
+         ' sin enviar. Se manda' + (cola.length > 1 ? 'n' : '') + ' solo cuando vuelva la señal.</div>';
+  }
+  datos.ciclos.forEach(function (c) { h += cardEmisor(c); });
+  h += bloqueCategorias(datos.ciclos);
+  app.innerHTML = h;
+}
+
+function cardEmisor(c) {
+  var urg = c.dias_cierre <= 1;
+  var txtCierre = c.dias_cierre === 0 ? 'cierra hoy ' + c.hora_cierre
+                : c.dias_cierre === 1 ? 'cierra mañana ' + c.hora_cierre
+                : c.dias_cierre > 0   ? 'cierra en ' + c.dias_cierre + ' días'
+                : 'cerró hace ' + Math.abs(c.dias_cierre) + ' días';
+
+  var h = '<article class="emisor" style="--c:' + c.color + '">';
+  h += '<div class="etop"><span class="enom">' + esc(c.nombre) + '</span>' +
+       '<span class="eper">' + nombrePeriodo(c.periodo) + '</span></div>';
+
+  if (c.count === 0) {
+    h += '<p class="vacio">' + (c.tipo === 'billetera'
+      ? 'Sin movimientos cargados. Agregalos antes de cerrar el período.'
+      : 'Sin consumos en este ciclo todavía.') + '</p>';
+  } else {
+    h += '<div class="montos"><span class="m1 num">' + plata(c.ars, 'ARS') + '</span>';
+    if (c.usd) h += '<span class="m2 num">' + plata(c.usd, 'USD') + '</span>';
+    h += '</div>';
+    h += '<div class="eper">' + c.count + ' consumo' + (c.count > 1 ? 's' : '') + '</div>';
+  }
+
+  h += medidorCiclo(c);
+
+  h += '<div class="cierra"><span class="pill' + (urg ? ' urg' : '') + '">' + txtCierre + '</span>';
+  c.vencidos.forEach(function (v) {
+    h += '<span class="pill alerta">' + nombrePeriodo(v.periodo) + ' sin cerrar</span>';
+  });
+  h += '</div>';
+
+  if (c.tarjetas.length) {
+    h += '<div class="tarjetas">';
+    c.tarjetas.forEach(function (t) {
+      h += '<span class="chip"><b>' + esc(t.nombre) + '</b>' +
+           (t.ultimos_digitos ? ' ·' + t.ultimos_digitos : '') +
+           ' &nbsp;vence ' + dm(t.fecha_vencimiento) + '</span>';
+    });
+    h += '</div>';
+  }
+  return h + '</article>';
+}
+
+/**
+ * Medidor de ciclo: dónde cae hoy entre el cierre anterior y el próximo.
+ * Es la única cosa que esta app sabe y un resumen mensual común no: el
+ * período de facturación no es el mes calendario.
+ */
+function medidorCiclo(c) {
+  var ini = c.desde, fin = c.fecha_cierre, hoy = hoyISO();
+  var pct = 50, total = null, transcurrido = null;
+  if (ini && fin) {
+    total = diasEntre(ini, fin);
+    transcurrido = diasEntre(ini, hoy);
+    if (total > 0) pct = Math.max(0, Math.min(100, (transcurrido / total) * 100));
+  }
+  var h = '<div class="ciclo"><div class="pista">';
+  h += '<i class="avance" style="width:' + pct.toFixed(1) + '%"></i>';
+  h += '<i class="corte"></i>';
+  h += '<i class="hoy" style="left:' + pct.toFixed(1) + '%" data-t="hoy"></i>';
+  h += '</div><div class="ejes"><span>' + (ini ? dm(ini) : 'inicio') + '</span>';
+  h += '<span>' + dm(fin) + ' · ' + c.hora_cierre + '</span></div></div>';
+  return h;
+}
+
+function bloqueCategorias(ciclos) {
+  var acum = {};
+  ciclos.forEach(function (c) {
+    Object.keys(c.categorias).forEach(function (k) {
+      var v = c.categorias[k];
+      var ars = (v.ars || 0) + (v.usd || 0) * (c.tc || 0);
+      acum[k] = (acum[k] || 0) + ars;
+    });
+  });
+  var pares = Object.keys(acum).map(function (k) { return [k, acum[k]]; })
+    .filter(function (p) { return p[1] > 0; })
+    .sort(function (a, b) { return b[1] - a[1]; });
+  if (!pares.length) return '';
+  var max = pares[0][1];
+  var h = '<section class="bloque"><h2>Por categoría · equivalente en pesos</h2>';
+  pares.forEach(function (p) {
+    h += '<div class="cat"><span class="n">' + esc(p[0]) + '</span>' +
+         '<span class="v">' + plata(p[1], 'ARS') + '</span>' +
+         '<span class="barra"><i style="width:' + ((p[1] / max) * 100).toFixed(1) + '%"></i></span></div>';
+  });
+  return h + '</section>';
+}
+
+function pintarError(msg) {
+  document.getElementById('app').innerHTML =
+    '<div class="centro">' + esc(msg) + '<br><br>Revisá la conexión con ⚙.</div>';
+}
+function esc(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function marcarEstado(t, girando) {
+  var el = document.getElementById('estado');
+  el.textContent = t;
+  el.className = girando ? 'girando' : '';
+}
+var tToast;
+function toast(msg) {
+  var el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('ver');
+  clearTimeout(tToast);
+  tToast = setTimeout(function () { el.classList.remove('ver'); }, 2600);
+}
+
+/* ══ formulario de gasto ═════════════════════════════════ */
+function abrirGasto() {
+  if (!cfg) { toast('Configurá la conexión primero'); return abrirCfg(); }
+  if (!datos || !datos.ciclos.length) { toast('Traé los datos con ↻ antes de cargar'); return; }
+
+  var sel = document.getElementById('gTarjeta');
+  sel.innerHTML = '';
+  datos.ciclos.forEach(function (c) {
+    c.tarjetas.forEach(function (t) {
+      var o = document.createElement('option');
+      o.value = c.banco_id + '|' + t.id + '|' + t.origen;
+      o.textContent = c.nombre + ' · ' + t.nombre + (t.ultimos_digitos ? ' ·' + t.ultimos_digitos : '');
+      sel.appendChild(o);
+    });
+  });
+  llenar('gCat', CATEGORIAS, 'Otros');
+  llenar('gTitular', TITULARES, 'Cristóbal');
+
+  document.getElementById('gFecha').value = hoyISO();
+  document.getElementById('gHora').value = horaAhora();
+  document.getElementById('gMonto').value = '';
+  document.getElementById('gComercio').value = '';
+  document.getElementById('errGasto').textContent = '';
+  monedaSel = 'ARS'; pintarSeg();
+  periodoElegido = null; revisarDiaDeCierre();
+  document.getElementById('dlgGasto').showModal();
+  setTimeout(function () { document.getElementById('gMonto').focus(); }, 120);
+}
+
+function llenar(id, arr, def) {
+  var s = document.getElementById(id);
+  s.innerHTML = '';
+  arr.forEach(function (v) {
+    var o = document.createElement('option');
+    o.value = v; o.textContent = v; if (v === def) o.selected = true;
+    s.appendChild(o);
+  });
+}
+function pintarSeg() {
+  Array.prototype.forEach.call(document.querySelectorAll('#segMoneda button'), function (b) {
+    b.setAttribute('aria-pressed', String(b.dataset.v === monedaSel));
+  });
+}
+function cicloSeleccionado() {
+  var v = document.getElementById('gTarjeta').value || '';
+  var bid = v.split('|')[0];
+  for (var i = 0; i < datos.ciclos.length; i++) if (datos.ciclos[i].banco_id === bid) return datos.ciclos[i];
+  return null;
+}
+
+/** Si la fecha cae justo el día de cierre, el período es ambiguo: preguntamos. */
+function revisarDiaDeCierre() {
+  var caja = document.getElementById('avisoCierre');
+  var c = cicloSeleccionado();
+  var f = document.getElementById('gFecha').value;
+  if (!c || f !== c.fecha_cierre) { caja.innerHTML = ''; periodoElegido = null; return; }
+
+  var sig = siguientePeriodo(c.periodo);
+  if (periodoElegido === null) periodoElegido = c.periodo;
+  caja.innerHTML =
+    '<div class="aviso">Es el día de cierre de ' + esc(c.nombre) + '. Hasta las ' +
+    c.hora_cierre + ' entra en este período; después, en el siguiente.' +
+    '<div class="opc">' +
+    '<button type="button" data-p="' + c.periodo + '" aria-pressed="' + (periodoElegido === c.periodo) + '">' +
+      nombrePeriodo(c.periodo) + '</button>' +
+    '<button type="button" data-p="' + sig + '" aria-pressed="' + (periodoElegido === sig) + '">' +
+      nombrePeriodo(sig) + '</button></div></div>';
+
+  Array.prototype.forEach.call(caja.querySelectorAll('button'), function (b) {
+    b.addEventListener('click', function () {
+      periodoElegido = b.dataset.p;
+      Array.prototype.forEach.call(caja.querySelectorAll('button'), function (x) {
+        x.setAttribute('aria-pressed', String(x.dataset.p === periodoElegido));
+      });
+    });
+  });
+}
+function siguientePeriodo(p) {
+  var a = p.split('-'), y = +a[0], m = +a[1] + 1;
+  if (m > 12) { m = 1; y++; }
+  return y + '-' + String(m).padStart(2, '0');
+}
+
+function enviarGasto(ev) {
+  ev.preventDefault();
+  var err = document.getElementById('errGasto');
+  var monto = parseFloat(document.getElementById('gMonto').value);
+  if (!(monto > 0)) { err.textContent = 'Poné un monto mayor a cero.'; return; }
+  var v = (document.getElementById('gTarjeta').value || '').split('|');
+  if (v.length < 3) { err.textContent = 'Elegí una tarjeta.'; return; }
+
+  var cuerpo = {
+    fecha: document.getElementById('gFecha').value,
+    hora: document.getElementById('gHora').value || '12:00',
+    banco_id: v[0], tarjeta_id: v[1], origen: v[2],
+    moneda: monedaSel, monto: monto,
+    categoria: document.getElementById('gCat').value,
+    comercio: document.getElementById('gComercio').value.trim(),
+    titular: document.getElementById('gTitular').value
+  };
+  if (periodoElegido) cuerpo.periodo = periodoElegido;
+
+  var btn = document.getElementById('gGuardar');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+
+  api('gasto_nuevo', {}, cuerpo)
+    .then(function (r) {
+      document.getElementById('dlgGasto').close();
+      toast('Guardado en ' + nombrePeriodo(r.periodo));
+      return refrescar();
+    })
+    .catch(function (e) {
+      cola.push(cuerpo); guardar(LS.cola, cola);
+      document.getElementById('dlgGasto').close();
+      toast('Sin conexión. Queda en cola.');
+      pintar();
+    })
+    .then(function () { btn.disabled = false; btn.textContent = 'Guardar'; });
+}
+
+/* ══ cola offline ════════════════════════════════════════ */
+function vaciarCola() {
+  if (!cola.length || !cfg) return Promise.resolve();
+  var pendientes = cola.slice();
+  var quedan = [];
+  return pendientes.reduce(function (p, g) {
+    return p.then(function () {
+      return api('gasto_nuevo', {}, g).catch(function () { quedan.push(g); });
+    });
+  }, Promise.resolve()).then(function () {
+    var enviados = pendientes.length - quedan.length;
+    cola = quedan; guardar(LS.cola, cola);
+    if (enviados) { toast(enviados + ' gasto' + (enviados > 1 ? 's' : '') + ' enviado' + (enviados > 1 ? 's' : '')); return refrescar(); }
+  });
+}
+
+/* ══ ajustes ═════════════════════════════════════════════ */
+function abrirCfg() {
+  document.getElementById('cUrl').value = cfg ? cfg.url : '';
+  document.getElementById('cToken').value = cfg ? cfg.token : '';
+  document.getElementById('errCfg').textContent = '';
+  document.getElementById('dlgCfg').showModal();
+}
+function guardarCfg(ev) {
+  ev.preventDefault();
+  var err = document.getElementById('errCfg');
+  var nuevo = {
+    url: document.getElementById('cUrl').value.trim(),
+    token: document.getElementById('cToken').value.trim()
+  };
+  if (!/\/exec$/.test(nuevo.url)) { err.textContent = 'La URL tiene que terminar en /exec.'; return; }
+  var anterior = cfg; cfg = nuevo;
+  err.textContent = 'Probando…';
+  api('ping').then(function (r) {
+    guardar(LS.cfg, cfg);
+    document.getElementById('dlgCfg').close();
+    toast('Conectado · ' + r.v);
+    return refrescar();
+  }).catch(function (e) {
+    cfg = anterior;
+    err.textContent = e.message;
+  });
+}
+
+/* ══ arranque ════════════════════════════════════════════ */
+document.getElementById('btnGasto').addEventListener('click', abrirGasto);
+document.getElementById('btnCfg').addEventListener('click', abrirCfg);
+document.getElementById('btnSync').addEventListener('click', function () { vaciarCola().then(refrescar); });
+document.getElementById('formGasto').addEventListener('submit', enviarGasto);
+document.getElementById('formCfg').addEventListener('submit', guardarCfg);
+document.getElementById('gCancelar').addEventListener('click', function () { document.getElementById('dlgGasto').close(); });
+document.getElementById('cCancelar').addEventListener('click', function () { document.getElementById('dlgCfg').close(); });
+document.getElementById('gFecha').addEventListener('change', revisarDiaDeCierre);
+document.getElementById('gTarjeta').addEventListener('change', function () { periodoElegido = null; revisarDiaDeCierre(); });
+Array.prototype.forEach.call(document.querySelectorAll('#segMoneda button'), function (b) {
+  b.addEventListener('click', function () { monedaSel = b.dataset.v; pintarSeg(); });
+});
+window.addEventListener('online', function () { vaciarCola().then(refrescar); });
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden && datos && Date.now() - datos.ts > 120000) refrescar();
+});
+
+pintar();                                   // 1) desde localStorage, instantáneo
+if (cfg) { vaciarCola().then(refrescar); }  // 2) red en segundo plano
+else marcarEstado('sin configurar', false);
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(function () {});
+}
+</script>
+</body>
+</html>
