@@ -196,6 +196,36 @@ input[type=number],input[type=date],input[type=time]{font-family:var(--mono)}
 }
 .centro{text-align:center;color:var(--tenue);padding:40px 20px;font-size:14px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ── censura de montos ──────────────────────────────────── */
+body.censurado .plata{filter:blur(9px);transition:filter .12s;cursor:default;user-select:none}
+/* ── info de cierre (reemplaza el medidor de barra) ─────── */
+.cierreinfo{margin:12px 0 4px;font-size:11px;color:var(--tenue);font-family:var(--mono)}
+.cierreinfo b{color:var(--papel);font-weight:600}
+/* ── detalle de gastos ──────────────────────────────────── */
+.filtros{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.filtros select{width:auto;flex:1;min-width:120px;padding:9px 10px;font-size:13px}
+.filtros button{width:auto;padding:9px 12px}
+.tabla{width:100%;border-collapse:collapse;font-size:12.5px}
+.tabla th{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--tenue);text-align:left;padding:7px 8px;border-bottom:1px solid var(--linea);font-weight:600;white-space:nowrap}
+.tabla td{padding:8px 8px;border-bottom:1px solid var(--linea);vertical-align:top}
+.tabla td.num{text-align:right;white-space:nowrap}
+.tabla tr:last-child td{border-bottom:none}
+.tabla .cmts{color:var(--tenue);font-size:11px}
+.thsort{cursor:pointer;user-select:none}
+.det-tot{font-size:12px;color:var(--tenue);font-family:var(--mono);margin-top:12px;text-align:right}
+.det-tot b{color:var(--papel)}
+/* ── vistas PC / Mobile ─────────────────────────────────── */
+body.vista-pc main{max-width:1080px}
+body.vista-pc #app{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;align-items:start}
+body.vista-pc #app>.emisor{margin-bottom:0}
+body.vista-pc #app>.pendientes,body.vista-pc #app>.bloque{grid-column:1/-1}
+@media (min-width:900px){
+  body.vista-auto main{max-width:1080px}
+  body.vista-auto #app{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;align-items:start}
+  body.vista-auto #app>.emisor{margin-bottom:0}
+  body.vista-auto #app>.pendientes,body.vista-auto #app>.bloque{grid-column:1/-1}
+}
 </style>
 </head>
 <body>
@@ -203,6 +233,8 @@ input[type=number],input[type=date],input[type=time]{font-family:var(--mono)}
 <header>
   <h1>Finanzas</h1>
   <span id="estado"></span>
+  <button class="iconbtn" id="btnVer" aria-label="Censurar montos" aria-pressed="false">👁</button>
+  <button class="iconbtn" id="btnDetalle" aria-label="Detalle de gastos">🧾</button>
   <button class="iconbtn" id="btnSync" aria-label="Actualizar">↻</button>
   <button class="iconbtn" id="btnCfg" aria-label="Ajustes">⚙</button>
 </header>
@@ -264,6 +296,14 @@ input[type=number],input[type=date],input[type=time]{font-family:var(--mono)}
       <label for="cToken">Token</label>
       <input type="text" id="cToken" required autocomplete="off">
     </div>
+    <div class="campo">
+      <label>Vista</label>
+      <div class="seg" id="segVista">
+        <button type="button" data-v="auto" aria-pressed="true">Auto</button>
+        <button type="button" data-v="pc" aria-pressed="false">PC</button>
+        <button type="button" data-v="mobile" aria-pressed="false">Mobile</button>
+      </div>
+    </div>
     <p class="error" id="errCfg"></p>
     <div class="acciones">
       <button type="button" class="btn-s" id="cCancelar">Cancelar</button>
@@ -272,12 +312,27 @@ input[type=number],input[type=date],input[type=time]{font-family:var(--mono)}
   </form>
 </dialog>
 
+<!-- ── hoja: detalle de gastos ── -->
+<dialog id="dlgDetalle">
+  <div class="hoja">
+    <h3>Detalle de gastos</h3>
+    <div class="filtros">
+      <select id="fCat"></select>
+      <select id="fTarjeta"></select>
+      <button type="button" class="btn-s" id="dCerrar">Cerrar</button>
+    </div>
+    <div id="detBody"><div class="centro">Cargando…</div></div>
+    <div class="det-tot" id="detTot"></div>
+  </div>
+</dialog>
+
 <script>
 "use strict";
 
 /* ══ estado ══════════════════════════════════════════════ */
 var LS = {
-  cfg: 'fa.cfg', datos: 'fa.datos', cola: 'fa.cola', cats: 'fa.cats'
+  cfg: 'fa.cfg', datos: 'fa.datos', cola: 'fa.cola', cats: 'fa.cats',
+  censura: 'fa.censura', vista: 'fa.vista'
 };
 var CATEGORIAS = ['Delivery','Gastronomía','Supermercado','Combustible','Entretenimiento',
   'Salud','Viajes','Suscripciones','Indumentaria','Transporte','Impuestos','Compras','Otros'];
@@ -289,6 +344,8 @@ var cola = leer(LS.cola, []);
 var monedaSel = 'ARS';
 var periodoElegido = null;   // override del día de cierre
 var cargando = false;
+var censurado = leer(LS.censura, false);
+var vista = leer(LS.vista, 'auto');   // 'auto' | 'pc' | 'mobile'
 
 function leer(k, def) {
   try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : def; }
@@ -496,8 +553,8 @@ function cardEmisor(c) {
       ? 'Sin movimientos cargados. Agregalos antes de cerrar el período.'
       : 'Sin consumos en este ciclo todavía.') + '</p>';
   } else {
-    h += '<div class="montos"><span class="m1 num">' + plata(c.ars, 'ARS') + '</span>';
-    if (c.usd) h += '<span class="m2 num">' + plata(c.usd, 'USD') + '</span>';
+    h += '<div class="montos"><span class="m1 num plata">' + plata(c.ars, 'ARS') + '</span>';
+    if (c.usd) h += '<span class="m2 num plata">' + plata(c.usd, 'USD') + '</span>';
     h += '</div>';
     h += '<div class="eper">' + c.count + ' consumo' + (c.count > 1 ? 's' : '') + '</div>';
   }
@@ -528,20 +585,9 @@ function cardEmisor(c) {
  * período de facturación no es el mes calendario.
  */
 function medidorCiclo(c) {
-  var ini = c.desde, fin = c.fecha_cierre, hoy = hoyISO();
-  var pct = 50, total = null, transcurrido = null;
-  if (ini && fin) {
-    total = diasEntre(ini, fin);
-    transcurrido = diasEntre(ini, hoy);
-    if (total > 0) pct = Math.max(0, Math.min(100, (transcurrido / total) * 100));
-  }
-  var h = '<div class="ciclo"><div class="pista">';
-  h += '<i class="avance" style="width:' + pct.toFixed(1) + '%"></i>';
-  h += '<i class="corte"></i>';
-  h += '<i class="hoy" style="left:' + pct.toFixed(1) + '%" data-t="hoy"></i>';
-  h += '</div><div class="ejes"><span>' + (ini ? dm(ini) : 'inicio') + '</span>';
-  h += '<span>' + dm(fin) + ' · ' + c.hora_cierre + '</span></div></div>';
-  return h;
+  var ini = c.desde, fin = c.fecha_cierre;
+  var rango = (ini ? dm(ini) + ' → ' : '') + dm(fin) + ' · ' + c.hora_cierre;
+  return '<div class="cierreinfo">ciclo <b>' + rango + '</b></div>';
 }
 
 function bloqueCategorias(ciclos) {
@@ -561,7 +607,7 @@ function bloqueCategorias(ciclos) {
   var h = '<section class="bloque"><h2>Por categoría · equivalente en pesos</h2>';
   pares.forEach(function (p) {
     h += '<div class="cat"><span class="n">' + esc(p[0]) + '</span>' +
-         '<span class="v">' + plata(p[1], 'ARS') + '</span>' +
+         '<span class="v plata">' + plata(p[1], 'ARS') + '</span>' +
          '<span class="barra"><i style="width:' + ((p[1] / max) * 100).toFixed(1) + '%"></i></span></div>';
   });
   return h + '</section>';
@@ -753,6 +799,104 @@ function guardarCfg(ev) {
 }
 
 /* ══ arranque ════════════════════════════════════════════ */
+/* ══ censura de montos ═══════════════════════════════════ */
+function aplicarCensura() {
+  document.body.classList.toggle('censurado', !!censurado);
+  var b = document.getElementById('btnVer');
+  if (b) { b.textContent = censurado ? '🙈' : '👁'; b.setAttribute('aria-pressed', String(!!censurado)); }
+}
+function toggleCensura() { censurado = !censurado; guardar(LS.censura, censurado); aplicarCensura(); }
+
+/* ══ vista PC / Mobile ═══════════════════════════════════ */
+function aplicarVista() {
+  document.body.classList.remove('vista-auto', 'vista-pc', 'vista-mobile');
+  document.body.classList.add('vista-' + (vista || 'auto'));
+  Array.prototype.forEach.call(document.querySelectorAll('#segVista button'), function (b) {
+    b.setAttribute('aria-pressed', String(b.dataset.v === vista));
+  });
+}
+function setVista(v) { vista = v; guardar(LS.vista, vista); aplicarVista(); }
+
+/* ══ detalle de gastos ═══════════════════════════════════ */
+var detGastos = [];
+var detOrden = 'desc';
+function nombreTarjeta(tid) {
+  if (!datos || !datos.ciclos) return tid || '—';
+  for (var i = 0; i < datos.ciclos.length; i++) {
+    var ts = datos.ciclos[i].tarjetas || [];
+    for (var j = 0; j < ts.length; j++) if (ts[j].id === tid)
+      return datos.ciclos[i].nombre + ' · ' + ts[j].nombre + (ts[j].ultimos_digitos ? ' ·' + ts[j].ultimos_digitos : '');
+  }
+  return tid || '—';
+}
+function abrirDetalle() {
+  if (!cfg) { toast('Configurá la conexión primero'); return abrirCfg(); }
+  document.getElementById('dlgDetalle').showModal();
+  document.getElementById('detBody').innerHTML = '<div class="centro">Cargando gastos…</div>';
+  document.getElementById('detTot').textContent = '';
+  api('gastos', { limit: 1000 })
+    .then(function (r) {
+      detGastos = (r && (r.gastos || r.items || r.data)) || [];
+      construirFiltrosDetalle();
+      pintarDetalle();
+    })
+    .catch(function (e) {
+      document.getElementById('detBody').innerHTML = '<div class="centro">' + esc(e.message) + '</div>';
+    });
+}
+function construirFiltrosDetalle() {
+  var cats = {}, tarj = {};
+  detGastos.forEach(function (g) {
+    if (g.categoria) cats[g.categoria] = true;
+    var tid = g.tarjeta_id || g.tarjeta;
+    if (tid) tarj[tid] = true;
+  });
+  document.getElementById('fCat').innerHTML = '<option value="">Todas las categorías</option>' +
+    Object.keys(cats).sort().map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('');
+  document.getElementById('fTarjeta').innerHTML = '<option value="">Todas las tarjetas</option>' +
+    Object.keys(tarj).sort().map(function (t) { return '<option value="' + esc(t) + '">' + esc(nombreTarjeta(t)) + '</option>'; }).join('');
+}
+function pintarDetalle() {
+  var fc = document.getElementById('fCat').value;
+  var ft = document.getElementById('fTarjeta').value;
+  var filas = detGastos.filter(function (g) {
+    if (fc && g.categoria !== fc) return false;
+    var tid = g.tarjeta_id || g.tarjeta;
+    if (ft && tid !== ft) return false;
+    return true;
+  });
+  filas.sort(function (a, b) {
+    var fa = (a.fecha_hora || a.fecha || ''), fb = (b.fecha_hora || b.fecha || '');
+    if (fa === fb) return 0;
+    return (fa < fb ? -1 : 1) * (detOrden === 'asc' ? 1 : -1);
+  });
+  var body = document.getElementById('detBody');
+  if (!filas.length) {
+    body.innerHTML = '<div class="centro">Sin gastos para ese filtro.</div>';
+    document.getElementById('detTot').textContent = ''; return;
+  }
+  var totA = 0, totU = 0;
+  var h = '<table class="tabla"><thead><tr>' +
+    '<th class="thsort" id="thFecha">Fecha ' + (detOrden === 'asc' ? '▲' : '▼') + '</th>' +
+    '<th>Comercio / categoría</th><th>Tarjeta</th><th class="num">Monto</th></tr></thead><tbody>';
+  filas.forEach(function (g) {
+    var mon = g.moneda || 'ARS';
+    if (mon === 'USD') totU += (+g.monto || 0); else totA += (+g.monto || 0);
+    var tid = g.tarjeta_id || g.tarjeta;
+    h += '<tr><td class="num">' + esc(dm(g.fecha)) + '</td>' +
+      '<td>' + esc(g.comercio || '—') + '<div class="cmts">' + esc(g.categoria || '') +
+      (g.titular ? ' · ' + esc(g.titular) : '') + '</div></td>' +
+      '<td class="cmts">' + esc(nombreTarjeta(tid)) + '</td>' +
+      '<td class="num plata">' + plata(g.monto, mon) + '</td></tr>';
+  });
+  h += '</tbody></table>';
+  body.innerHTML = h;
+  var thF = document.getElementById('thFecha');
+  if (thF) thF.addEventListener('click', function () { detOrden = (detOrden === 'asc' ? 'desc' : 'asc'); pintarDetalle(); });
+  document.getElementById('detTot').innerHTML = filas.length + ' gasto' + (filas.length > 1 ? 's' : '') +
+    ' · <b class="plata">' + plata(totA, 'ARS') + '</b>' + (totU ? ' · <b class="plata">' + plata(totU, 'USD') + '</b>' : '');
+}
+
 document.getElementById('btnGasto').addEventListener('click', abrirGasto);
 document.getElementById('btnCfg').addEventListener('click', abrirCfg);
 document.getElementById('btnSync').addEventListener('click', function () { vaciarCola().then(refrescar); });
@@ -769,6 +913,17 @@ window.addEventListener('online', function () { vaciarCola().then(refrescar); })
 document.addEventListener('visibilitychange', function () {
   if (!document.hidden && datos && Date.now() - datos.ts > 120000) refrescar();
 });
+
+document.getElementById('btnVer').addEventListener('click', toggleCensura);
+document.getElementById('btnDetalle').addEventListener('click', abrirDetalle);
+document.getElementById('dCerrar').addEventListener('click', function () { document.getElementById('dlgDetalle').close(); });
+document.getElementById('fCat').addEventListener('change', pintarDetalle);
+document.getElementById('fTarjeta').addEventListener('change', pintarDetalle);
+Array.prototype.forEach.call(document.querySelectorAll('#segVista button'), function (b) {
+  b.addEventListener('click', function () { setVista(b.dataset.v); });
+});
+aplicarCensura();
+aplicarVista();
 
 pintar();                                   // 1) desde localStorage, instantáneo
 if (cfg) { vaciarCola().then(refrescar); }  // 2) red en segundo plano
