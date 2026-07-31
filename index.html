@@ -226,6 +226,22 @@ body.vista-pc #app>.pendientes,body.vista-pc #app>.bloque{grid-column:1/-1}
   body.vista-auto #app>.emisor{margin-bottom:0}
   body.vista-auto #app>.pendientes,body.vista-auto #app>.bloque{grid-column:1/-1}
 }
+/* ── detalle: color por tipo de tarjeta + tamaño ───────── */
+#dlgDetalle{max-width:1200px;width:75vw;margin:auto}
+#dlgDetalle .hoja{border-radius:16px;max-height:82vh}
+@media (max-width:760px){
+  #dlgDetalle{width:100%;max-width:560px;margin:auto auto 0}
+  #dlgDetalle .hoja{border-radius:16px 16px 0 0;max-height:88vh}
+}
+.tabla td{padding:10px 10px}
+.tabla .cmerc{font-weight:600}
+.tabla tbody tr:hover td{background:rgba(255,255,255,.035)}
+.tdcard .cbanco{color:var(--tenue);font-size:11px;margin-right:5px}
+.ptag{display:inline-block;font-size:11px;font-family:var(--mono);border:1px solid var(--tc,var(--linea));color:var(--tc,var(--tenue));border-radius:7px;padding:2px 7px;white-space:nowrap}
+/* ── por-tarjeta dentro de la card de banco ─────────────── */
+.portarj{margin:11px 0 2px;display:flex;flex-direction:column;gap:7px}
+.ptrow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ptval{font-size:13.5px}
 </style>
 </head>
 <body>
@@ -444,11 +460,24 @@ function refrescar() {
             c.ars = pb.ars; c.usd = pb.usd; c.count = pb.count;
             c.tc = r.tc_usd_ars;
             c.categorias = r.por_categoria || {};
+            c.porTarjeta = r.por_tarjeta || null;   // lo sirve el backend nuevo (resumen)
           });
-          datos = { ciclos: ciclos, ts: Date.now() };
-          guardar(LS.datos, datos);
-          pintar();
-          marcarEstado(horaAhora(), false);
+          function terminar() {
+            ciclos.forEach(function (c) { if (!c.porTarjeta) c.porTarjeta = {}; });
+            datos = { ciclos: ciclos, ts: Date.now() };
+            guardar(LS.datos, datos);
+            pintar();
+            marcarEstado(horaAhora(), false);
+          }
+          // Fallback: backend viejo sin por_tarjeta -> lo calculamos desde gastos (1 lectura extra).
+          var faltan = ciclos.filter(function (c) { return c.tipo !== 'billetera' && !c.porTarjeta; });
+          if (faltan.length) {
+            return api('gastos', { limit: 2000 }).then(function (g) {
+              asignarPorTarjeta(faltan, (g && (g.gastos || g.items || g.data)) || []);
+              terminar();
+            }).catch(terminar);
+          }
+          terminar();
         });
     })
     .catch(function (e) {
@@ -559,6 +588,7 @@ function cardEmisor(c) {
     h += '<div class="eper">' + c.count + ' consumo' + (c.count > 1 ? 's' : '') + '</div>';
   }
 
+  h += bloquePorTarjeta(c);
   h += medidorCiclo(c);
 
   h += '<div class="cierra"><span class="pill' + (urg ? ' urg' : '') + '">' + txtCierre + '</span>';
@@ -829,6 +859,50 @@ function nombreTarjeta(tid) {
   }
   return tid || '—';
 }
+function tarjetaInfo(tid) {
+  if (datos && datos.ciclos) {
+    for (var i = 0; i < datos.ciclos.length; i++) {
+      var c = datos.ciclos[i], ts = c.tarjetas || [];
+      for (var j = 0; j < ts.length; j++) if (ts[j].id === tid)
+        return { banco: c.nombre, card: ts[j].nombre + (ts[j].ultimos_digitos ? ' ·' + ts[j].ultimos_digitos : ''), origen: ts[j].origen };
+    }
+  }
+  return { banco: '', card: tid || '—', origen: '' };
+}
+function colorOrigen(o) {
+  o = (o || '').toLowerCase();
+  if (o.indexOf('visa') >= 0) return '#60A5FA';
+  if (o.indexOf('amex') >= 0 || o.indexOf('american') >= 0) return '#5fbf7f';
+  if (o.indexOf('master') >= 0) return '#e8b23a';
+  if (o.indexOf('mp') >= 0 || o.indexOf('mercado') >= 0) return '#009EE3';
+  return 'var(--tenue)';
+}
+function asignarPorTarjeta(ciclos, gastos) {
+  var idx = {};
+  ciclos.forEach(function (c) { idx[c.periodo + '|' + c.banco_id] = c; c.porTarjeta = {}; });
+  (gastos || []).forEach(function (g) {
+    var c = idx[(g.periodo || '') + '|' + (g.banco_id || '')];
+    if (!c) return;
+    var tid = g.tarjeta_id || g.tarjeta; if (!tid) return;
+    var b = c.porTarjeta[tid] || (c.porTarjeta[tid] = { ars: 0, usd: 0, count: 0 });
+    if ((g.moneda || 'ARS') === 'USD') b.usd += (+g.monto || 0); else b.ars += (+g.monto || 0);
+    b.count++;
+  });
+}
+function bloquePorTarjeta(c) {
+  if (c.tipo === 'billetera') return '';
+  var ts = c.tarjetas || [], pt = c.porTarjeta || {};
+  var con = ts.filter(function (t) { return pt[t.id] && (pt[t.id].ars || pt[t.id].usd); });
+  if (con.length < 2) return '';
+  var h = '<div class="portarj">';
+  con.forEach(function (t) {
+    var b = pt[t.id];
+    h += '<div class="ptrow"><span class="ptag" style="--tc:' + colorOrigen(t.origen) + '">' +
+      esc(t.nombre) + (t.ultimos_digitos ? ' ·' + t.ultimos_digitos : '') + '</span>' +
+      '<span class="ptval num plata">' + plata(b.ars, 'ARS') + (b.usd ? ' · ' + plata(b.usd, 'USD') : '') + '</span></div>';
+  });
+  return h + '</div>';
+}
 function abrirDetalle() {
   if (!cfg) { toast('Configurá la conexión primero'); return abrirCfg(); }
   document.getElementById('dlgDetalle').showModal();
@@ -883,10 +957,12 @@ function pintarDetalle() {
     var mon = g.moneda || 'ARS';
     if (mon === 'USD') totU += (+g.monto || 0); else totA += (+g.monto || 0);
     var tid = g.tarjeta_id || g.tarjeta;
-    h += '<tr><td class="num">' + esc(dm(g.fecha)) + '</td>' +
-      '<td>' + esc(g.comercio || '—') + '<div class="cmts">' + esc(g.categoria || '') +
-      (g.titular ? ' · ' + esc(g.titular) : '') + '</div></td>' +
-      '<td class="cmts">' + esc(nombreTarjeta(tid)) + '</td>' +
+    var ti = tarjetaInfo(tid), col = colorOrigen(ti.origen);
+    h += '<tr>' +
+      '<td class="num" style="border-left:3px solid ' + col + '">' + esc(dm(g.fecha)) + '</td>' +
+      '<td><span class="cmerc">' + esc(g.comercio || '—') + '</span>' +
+      '<div class="cmts">' + esc(g.categoria || '') + (g.titular ? ' · ' + esc(g.titular) : '') + '</div></td>' +
+      '<td class="tdcard"><span class="cbanco">' + esc(ti.banco) + '</span><span class="ptag" style="--tc:' + col + '">' + esc(ti.card) + '</span></td>' +
       '<td class="num plata">' + plata(g.monto, mon) + '</td></tr>';
   });
   h += '</tbody></table>';
