@@ -14,6 +14,7 @@
   --grafito:#1e212a;    /* superficie de card */
   --linea:#2c3140;      /* bordes */
   --tenue:#8b93a7;      /* texto secundario */
+  --papel2:#c9cfdb;     /* secundario alto contraste (tablas sobre fondo oscuro) */
   --alerta:#e8b23a;     /* vencido sin cerrar */
   --ok:#5fbf7f;
   --radio:14px;
@@ -207,13 +208,13 @@ body.censurado .plata{filter:blur(9px);transition:filter .12s;cursor:default;use
 .filtros select{width:auto;flex:1;min-width:120px;padding:9px 10px;font-size:13px}
 .filtros button{width:auto;padding:9px 12px}
 .tabla{width:100%;border-collapse:collapse;font-size:12.5px}
-.tabla th{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--tenue);text-align:left;padding:7px 8px;border-bottom:1px solid var(--linea);font-weight:600;white-space:nowrap}
-.tabla td{padding:8px 8px;border-bottom:1px solid var(--linea);vertical-align:top}
+.tabla th{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--papel2);text-align:left;padding:7px 8px;border-bottom:1px solid var(--linea);font-weight:600;white-space:nowrap}
+.tabla td{padding:8px 8px;border-bottom:1px solid var(--linea);vertical-align:top;color:var(--papel)}
 .tabla td.num{text-align:right;white-space:nowrap}
 .tabla tr:last-child td{border-bottom:none}
-.tabla .cmts{color:var(--tenue);font-size:11px}
+.tabla .cmts{color:var(--papel2);font-size:11px}
 .thsort{cursor:pointer;user-select:none}
-.det-tot{font-size:12px;color:var(--tenue);font-family:var(--mono);margin-top:12px;text-align:right}
+.det-tot{font-size:12px;color:var(--papel2);font-family:var(--mono);margin-top:12px;text-align:right}
 .det-tot b{color:var(--papel)}
 /* ── vistas PC / Mobile ─────────────────────────────────── */
 body.vista-pc main{max-width:1080px}
@@ -236,7 +237,7 @@ body.vista-pc #app>.pendientes,body.vista-pc #app>.bloque{grid-column:1/-1}
 .tabla td{padding:10px 10px}
 .tabla .cmerc{font-weight:600}
 .tabla tbody tr:hover td{background:rgba(255,255,255,.035)}
-.tdcard .cbanco{color:var(--tenue);font-size:11px;margin-right:5px}
+.tdcard .cbanco{color:var(--papel2);font-size:11px;margin-right:5px}
 .ptag{display:inline-block;font-size:11px;font-family:var(--mono);border:1px solid var(--tc,var(--linea));color:var(--tc,var(--tenue));border-radius:7px;padding:2px 7px;white-space:nowrap}
 /* ── por-tarjeta dentro de la card de banco ─────────────── */
 .portarj{margin:11px 0 2px;display:flex;flex-direction:column;gap:7px}
