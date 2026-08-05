@@ -275,6 +275,11 @@ nav#nav button{background:none;border:0;border-bottom:2px solid transparent;colo
 nav#nav button[aria-current="true"]{color:var(--papel);border-bottom-color:var(--papel)}
 nav#nav button:active{opacity:.7}
 .vista{max-width:1080px;margin:0 auto;padding:0}
+#gateOverlay{position:fixed;inset:0;z-index:100;background:rgba(20,22,28,.98);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:28px;text-align:center}
+#gateOverlay h2{font-size:19px;margin:0;color:var(--papel)}
+#gateOverlay p{color:var(--papel2);max-width:460px;margin:0;line-height:1.6}
+#gateOverlay .falta{font-family:var(--mono);color:var(--alerta)}
+#gateOverlay button{width:auto;padding:14px 24px;border:0;border-radius:12px;font-size:15px;font-weight:650;cursor:pointer;background:var(--papel);color:var(--tinta)}
 </style>
 </head>
 <body>
@@ -310,6 +315,11 @@ nav#nav button:active{opacity:.7}
 
 <div class="fab"><button id="btnGasto">Cargar gasto</button></div>
 <div id="toast" role="status" aria-live="polite"></div>
+<div id="gateOverlay" hidden>
+  <h2>Período vencido sin resumen</h2>
+  <p id="gateMsg"></p>
+  <button class="btn-p" id="gateRetry">Ya subí los PDF · reintentar</button>
+</div>
 
 <!-- ── hoja: nuevo gasto ── -->
 <dialog id="dlgGasto">
@@ -506,6 +516,7 @@ function refrescar() {
             guardar(LS.datos, datos);
             pintar();
             marcarEstado(horaAhora(), false);
+            chequearGate();
           }
           // Fallback: backend viejo sin por_tarjeta -> lo calculamos desde gastos (1 lectura extra).
           var faltan = ciclos.filter(function (c) { return c.tipo !== 'billetera' && !c.porTarjeta; });
@@ -576,7 +587,7 @@ function armarCiclos(cal, bancos) {
       dias_cierre: abierto.dias_cierre,
       desde: previo ? previo.fecha_cierre : null,
       tarjetas: abierto.tarjetas,
-      vencidos: vencidos.map(function (v) { return { periodo: v.periodo, fecha: v.fecha_cierre }; }),
+      vencidos: vencidos.map(function (v) { return { periodo: v.periodo, fecha: v.fecha_cierre, vencMin: _minVenc(v.tarjetas) }; }),
       ars: 0, usd: 0, count: 0, categorias: {}
     });
   });
@@ -631,7 +642,7 @@ function cardEmisor(c) {
 
   h += '<div class="cierra"><span class="pill' + (urg ? ' urg' : '') + '">' + txtCierre + '</span>';
   c.vencidos.forEach(function (v) {
-    h += '<span class="pill alerta">' + nombrePeriodo(v.periodo) + ' sin cerrar</span>';
+    h += '<span class="pill alerta">' + nombrePeriodo(v.periodo) + ' sin cerrar' + (v.vencMin ? ' · PDF antes del ' + dm(v.vencMin) : '') + '</span>';
   });
   h += '</div>';
 
@@ -887,6 +898,7 @@ function setVista(v) { vista = v; guardar(LS.vista, vista); aplicarVista(); }
 
 /* ══ detalle de gastos ═══════════════════════════════════ */
 var detGastos = [];
+var detCache = leer('fa.gastos', null);
 var detOrden = 'desc';
 function nombreTarjeta(tid) {
   if (!datos || !datos.ciclos) return tid || '—';
@@ -950,11 +962,12 @@ function mostrarVista(v){
 }
 function abrirDetalle() {
   if (!cfg) { toast('Configurá la conexión primero'); return abrirCfg(); }
-  document.getElementById('detBody').innerHTML = '<div class="centro">Cargando gastos…</div>';
-  document.getElementById('detTot').textContent = '';
+  if (detCache && detCache.length) { detGastos = detCache; construirFiltrosDetalle(); pintarDetalle(); }
+  else { document.getElementById('detBody').innerHTML = '<div class="centro">Cargando gastos…</div>'; document.getElementById('detTot').textContent = ''; }
   api('gastos', { limit: 1000 })
     .then(function (r) {
       detGastos = (r && (r.gastos || r.items || r.data)) || [];
+      detCache = detGastos; try { guardar('fa.gastos', detCache); } catch (e) {}
       construirFiltrosDetalle();
       pintarDetalle();
     })
@@ -1098,6 +1111,72 @@ function cargarPdfJs(){
 /* ── estado históricos ── */
 var histLista = null;         // del backend
 var histCache = leer('fa.histcache', {});   // id -> parsed
+var histList = leer('fa.histlist', null);
+var gateClosing = false, gateCerrados = {};
+
+function _minVenc(tarjetas){
+  var v = null;
+  (tarjetas || []).forEach(function(t){ if(t.fecha_vencimiento && (!v || t.fecha_vencimiento < v)) v = t.fecha_vencimiento; });
+  return v;
+}
+function refrescarHistList(){
+  return api('historicos').then(function(r){ histList = (r && r.historicos) || []; try{ guardar('fa.histlist', histList); }catch(e){} return histList; });
+}
+function gruposHist(list){
+  var g = {};
+  (list || []).forEach(function(h){
+    if(!h.vencimiento) return;
+    var d = h.vencimiento.split('-'), m = +d[1]-1, y = +d[0], pm = m-1, py = y; if(pm<0){ pm=11; py--; }
+    var k = py + '-' + String(pm+1).padStart(2,'0');
+    (g[k] = g[k] || {})[h.tarjeta_tipo] = true;
+  });
+  return g;
+}
+function podarHistCache(){
+  var per = {};
+  Object.keys(histCache).forEach(function(id){ var p = (histCache[id]||{}).periodo; if(p) per[p]=true; });
+  var keep = Object.keys(per).sort().reverse().slice(0,3);   // últimos 3 meses
+  var nuevo = {};
+  Object.keys(histCache).forEach(function(id){ var p = (histCache[id]||{}).periodo; if(p && keep.indexOf(p)>=0) nuevo[id]=histCache[id]; });
+  histCache = nuevo; try{ guardar('fa.histcache', histCache); }catch(e){}
+}
+function chequearGate(){
+  if(!datos || !datos.ciclos) return;
+  evaluarGate();                                   // instantáneo desde caché
+  refrescarHistList().then(evaluarGate).catch(function(){});
+}
+function evaluarGate(){
+  if(!datos || !datos.ciclos) return;
+  if(histList === null){ mostrarBloqueo([]); return; }   // fail-open: sin datos de Drive, no bloqueo
+  var grupos = gruposHist(histList), hoy = hoyISO(), bloquear = [], cerrar = [];
+  datos.ciclos.forEach(function(c){
+    if(c.tipo !== 'bancario') return;
+    (c.vencidos || []).forEach(function(v){
+      var g = grupos[v.periodo] || {};
+      if(g.VISA && g.AMEX){ if(!gateCerrados[c.banco_id+'|'+v.periodo]) cerrar.push({banco:c.banco_id, periodo:v.periodo}); }
+      else if(v.vencMin && hoy >= v.vencMin){
+        var falta = (!g.VISA?'VISA':'') + ((!g.VISA && !g.AMEX)?' y ':'') + (!g.AMEX?'AMEX':'');
+        bloquear.push({nombre:c.nombre, periodo:v.periodo, venc:v.vencMin, falta:falta});
+      }
+    });
+  });
+  if(cerrar.length && !gateClosing){
+    gateClosing = true;
+    cerrar.forEach(function(x){ gateCerrados[x.banco+'|'+x.periodo] = true; });
+    Promise.all(cerrar.map(function(x){ return api('periodo_cerrar', {}, {banco_id:x.banco, periodo:x.periodo}).catch(function(){}); }))
+      .then(function(){ gateClosing = false; refrescar(); });
+  }
+  mostrarBloqueo(bloquear);
+}
+function mostrarBloqueo(lista){
+  var ov = document.getElementById('gateOverlay');
+  if(!ov) return;
+  if(!lista.length){ ov.hidden = true; return; }
+  var l = lista.map(function(b){ return nombrePeriodo(b.periodo) + ' — falta ' + esc(b.falta) + ' (venció ' + dm(b.venc) + ')'; }).join('<br>');
+  document.getElementById('gateMsg').innerHTML = 'Para seguir usando la app subí a tu Drive los resúmenes que faltan:<br><span class="falta">' + l + '</span><br><br>Después tocá reintentar.';
+  ov.hidden = false;
+}
+
 var histSel = {};             // periodo -> bool
 var histModo = 'mes';         // 'mes' | 'comparar'
 var histSerie = 'total';      // total | VISA | AMEX (en comparar)
@@ -1110,7 +1189,7 @@ function parsearHistorico(item){
   if(histCache[item.id]) return Promise.resolve(histCache[item.id]);
   return cargarPdfJs().then(function(){ return api('historico_pdf',{id:item.id}); })
     .then(function(r){ return parseResumenPDF(b64toU8(r.base64), item.tarjeta_tipo); })
-    .then(function(parsed){ histCache[item.id]=parsed; try{ guardar('fa.histcache', histCache); }catch(e){} return parsed; });
+    .then(function(parsed){ histCache[item.id]=parsed; podarHistCache(); return parsed; });
 }
 
 function agruparMeses(historicos){
@@ -1129,11 +1208,11 @@ function agruparMeses(historicos){
 function abrirHist(){
   if(!cfg){ toast('Configurá la conexión primero'); return abrirCfg(); }
   var cont=document.getElementById('histBody');
-  cont.innerHTML='<div class="centro">Cargando lista…</div>';
-  api('historicos').then(function(r){
-    histLista=agruparMeses(r.historicos||[]);
-    histSel={}; renderHistSel();
-  }).catch(function(e){ cont.innerHTML='<div class="centro">'+esc(e.message)+'</div>'; });
+  histSel={};
+  if(histList && histList.length){ histLista=agruparMeses(histList); renderHistSel(); }
+  else cont.innerHTML='<div class="centro">Cargando lista…</div>';
+  refrescarHistList().then(function(list){ histLista=agruparMeses(list); renderHistSel(); })
+    .catch(function(e){ if(!(histList && histList.length)) cont.innerHTML='<div class="centro">'+esc(e.message)+'</div>'; });
 }
 
 function renderHistSel(){
@@ -1272,6 +1351,7 @@ document.addEventListener('visibilitychange', function () {
 });
 
 document.getElementById('btnVer').addEventListener('click', toggleCensura);
+document.getElementById('gateRetry').addEventListener('click', function(){ document.getElementById('gateMsg').textContent='Chequeando…'; refrescarHistList().then(evaluarGate).catch(function(){ evaluarGate(); }); });
 Array.prototype.forEach.call(document.querySelectorAll('#nav button'), function (b) {
   b.addEventListener('click', function () { mostrarVista(b.dataset.v); });
 });
