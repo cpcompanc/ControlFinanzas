@@ -1,7 +1,7 @@
 /* Service worker: solo cachea el armazón de la app.
    Las llamadas a la API NUNCA se cachean acá — el frescor de los datos lo
    maneja la app con localStorage, y cachearlos dos veces daría números viejos. */
-var CACHE = 'finanzas-v9';
+var CACHE = 'finanzas-v10';
 var SHELL = ['./index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function (e) {
